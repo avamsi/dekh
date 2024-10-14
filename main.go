@@ -63,6 +63,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.x, m.y = 0, 0
 		m.width, m.height = msg.Width, msg.Height
+	case tea.MouseMsg:
+		switch msg.Button {
+		case tea.MouseButtonWheelUp:
+			m.y = max(m.y-1, 0)
+		case tea.MouseButtonWheelRight:
+			m.x = min(m.x+1, m.width-1)
+		case tea.MouseButtonWheelDown:
+			m.y = min(m.y+1, m.height-1)
+		case tea.MouseButtonWheelLeft:
+			m.x = max(m.x-1, 0)
+		}
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "up":
@@ -182,7 +193,7 @@ func dekh(cmd []string) error {
 	}
 	var (
 		m      = model{d: 2 * time.Second, cmd: cmd}
-		p      = tea.NewProgram(m, tea.WithAltScreen())
+		p      = tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 		_, err = p.Run()
 	)
 	return err
