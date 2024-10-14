@@ -17,51 +17,58 @@ type model struct {
 	d   time.Duration
 	cmd []string
 
-	t time.Time
+	t      time.Time
+	output string
 }
 
-func (m model) tick() tea.Cmd {
-	return tea.Tick(m.d, func(t time.Time) tea.Msg {
-		return t
-	})
+type outputMsg string
+
+func (m model) execute() tea.Cmd {
+	return func() tea.Msg {
+		var (
+			cmd         = exec.Command(m.cmd[0], m.cmd[1:]...)
+			output, err = cmd.CombinedOutput()
+		)
+		if err != nil {
+			return outputMsg(err.Error())
+		}
+		return outputMsg(output)
+	}
 }
 
 func (m model) Init() tea.Cmd {
-	return m.tick()
+	return m.execute()
+}
+
+type tickMsg time.Time
+
+func (m model) tick() tea.Cmd {
+	return tea.Tick(m.d, func(t time.Time) tea.Msg {
+		return tickMsg(t)
+	})
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case time.Time:
-		m.t = msg
+	case outputMsg:
+		m.output = string(msg)
+		return m, m.tick()
+	case tickMsg:
+		m.t = time.Time(msg)
+		return m, m.execute()
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c", "q":
 			return m, tea.Quit
 		}
 	}
-	return m, m.tick()
-}
-
-func (m model) headerView() string {
-	return fmt.Sprintf(
-		"Every: %s\tCommand: %s\tTime: %s\n",
-		m.d, strings.Join(m.cmd, " "), m.t.Format(time.DateTime))
-}
-
-func (m model) commandView() string {
-	var (
-		cmd         = exec.Command(m.cmd[0], m.cmd[1:]...)
-		output, err = cmd.CombinedOutput()
-	)
-	if err != nil {
-		return err.Error()
-	}
-	return string(output)
+	return m, nil
 }
 
 func (m model) View() string {
-	return m.headerView() + "\n" + m.commandView()
+	return fmt.Sprintf(
+		"Every: %s\tCommand: %s\tTime: %s\n\n%s",
+		m.d, strings.Join(m.cmd, " "), m.t.Format(time.DateTime), m.output)
 }
 
 // dekh is a simple modern alternative to the watch command.
