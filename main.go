@@ -91,19 +91,15 @@ func parseText(s string) parsedText {
 }
 
 func (pt parsedText) viewport(x, y, width, height int) string {
-	var (
-		b  strings.Builder
-		x2 = min(x+width, pt.width)
-		x1 = max(x2-width, 0)
-		y2 = min(y+height, len(pt.lines))
-		y1 = max(y2-height, 0)
-	)
-	b.Grow((x2 - x1) * (y2 - y1))
-	for i, line := range pt.lines[y1:y2] {
+	var b strings.Builder
+	width = min(width, pt.width)
+	height = min(height, len(pt.lines))
+	b.Grow(width * height)
+	for i, line := range pt.lines[y : y+height] {
 		if i > 0 {
 			b.WriteByte('\n')
 		}
-		x, width := x1, width
+		x, width := x, width
 		for _, pr := range line.runes {
 			if pr.visible {
 				if x > 0 {
@@ -152,51 +148,22 @@ func (m model) Init() tea.Cmd {
 	return m.execute()
 }
 
+func (m model) xy() (int, int) {
+	var (
+		x2 = min(m.x+m.width, m.output.width)
+		x1 = max(x2-m.width, 0)
+		y2 = min(m.y+m.height, len(m.output.lines))
+		y1 = max(y2-m.height, 0)
+	)
+	return x1, y1
+}
+
 type tickMsg time.Time
 
 func (m model) tick() tea.Cmd {
 	return tea.Tick(m.d, func(t time.Time) tea.Msg {
 		return tickMsg(t)
 	})
-}
-
-func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case outputMsg:
-		m.output = parseText(string(msg))
-		return m, m.tick()
-	case tickMsg:
-		m.t = time.Time(msg)
-		return m, m.execute()
-	case tea.WindowSizeMsg:
-		m.x, m.y = 0, 0
-		m.width, m.height = msg.Width, msg.Height
-	case tea.MouseMsg:
-		switch msg.Button {
-		case tea.MouseButtonWheelUp:
-			m.y = max(m.y-1, 0)
-		case tea.MouseButtonWheelRight:
-			m.x = min(m.x+1, m.width-1)
-		case tea.MouseButtonWheelDown:
-			m.y = min(m.y+1, m.height-1)
-		case tea.MouseButtonWheelLeft:
-			m.x = max(m.x-1, 0)
-		}
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "up":
-			m.y = max(m.y-1, 0)
-		case "right":
-			m.x = min(m.x+1, m.width-1)
-		case "down":
-			m.y = min(m.y+1, m.height-1)
-		case "left":
-			m.x = max(m.x-1, 0)
-		case "ctrl+c", "q":
-			return m, tea.Quit
-		}
-	}
-	return m, nil
 }
 
 func boxView(title, content string, width int) string {
@@ -207,21 +174,60 @@ func boxView(title, content string, width int) string {
 	return style.Render(content)
 }
 
+func (m model) headerView() string {
+	return lipgloss.JoinHorizontal(lipgloss.Top,
+		boxView("Every", m.d.String(), 8),
+		boxView("Command", strings.Join(m.cmd, " "), m.width-33),
+		boxView("Time", m.t.Format(time.DateTime), 19))
+}
+
+func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case outputMsg:
+		m.output = parseText(string(msg))
+		m.x, m.y = m.xy()
+		return m, m.tick()
+	case tickMsg:
+		m.t = time.Time(msg)
+		return m, m.execute()
+	case tea.WindowSizeMsg:
+		m.width, m.height = msg.Width, msg.Height
+		m.height -= lipgloss.Height(m.headerView())
+	case tea.MouseMsg:
+		switch msg.Button {
+		case tea.MouseButtonWheelUp:
+			m.y--
+		case tea.MouseButtonWheelRight:
+			m.x++
+		case tea.MouseButtonWheelDown:
+			m.y++
+		case tea.MouseButtonWheelLeft:
+			m.x--
+		}
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "up":
+			m.y--
+		case "right":
+			m.x++
+		case "down":
+			m.y++
+		case "left":
+			m.x--
+		case "ctrl+c", "q":
+			return m, tea.Quit
+		}
+	}
+	m.x, m.y = m.xy()
+	return m, nil
+}
+
 func (m model) View() string {
 	if m.width == 0 {
 		return ""
 	}
-	var (
-		headerView = lipgloss.JoinHorizontal(
-			lipgloss.Top,
-			boxView("Every", m.d.String(), 8),
-			boxView("Command", strings.Join(m.cmd, " "), m.width-33),
-			boxView("Time", m.t.Format(time.DateTime), 19),
-		)
-		remainingHeight = m.height - lipgloss.Height(headerView)
-		commandView     = m.output.viewport(m.x, m.y, m.width, remainingHeight)
-	)
-	return headerView + "\n" + commandView
+	return m.headerView() + "\n" +
+		m.output.viewport(m.x, m.y, m.width, m.height)
 }
 
 // dekh is a simple modern alternative to the watch command.
@@ -236,8 +242,9 @@ func dekh(cmd []string) error {
 		}
 	}
 	var (
-		m      = model{d: 2 * time.Second, cmd: cmd}
-		p      = tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
+		m = model{d: 2 * time.Second, cmd: cmd}
+		p = tea.NewProgram(m,
+			tea.WithAltScreen(), tea.WithMouseCellMotion())
 		_, err = p.Run()
 	)
 	return err
