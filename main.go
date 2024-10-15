@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"iter"
 	"os/exec"
 	"strings"
@@ -11,6 +10,7 @@ import (
 
 	"github.com/avamsi/climate"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/google/shlex"
 	"github.com/mattn/go-runewidth"
 )
@@ -173,11 +173,29 @@ func viewport(s string, x, y, width, height int) string {
 	return b.String()
 }
 
+func boxView(title, content string, width int) string {
+	border := lipgloss.NormalBorder()
+	border.Top = title + strings.Repeat(border.Top, width-len(title))
+	style := lipgloss.NewStyle().
+		Border(border).BorderForeground(lipgloss.Color("59")).Width(width)
+	return style.Render(content)
+}
+
 func (m model) View() string {
-	view := fmt.Sprintf(
-		"Every: %s\tCommand: %s\tTime: %s\n\n%s",
-		m.d, strings.Join(m.cmd, " "), m.t.Format(time.DateTime), m.output)
-	return viewport(view, m.x, m.y, m.width, m.height)
+	if m.width == 0 {
+		return ""
+	}
+	var (
+		headerView = lipgloss.JoinHorizontal(
+			lipgloss.Top,
+			boxView("Every", m.d.String(), 8),
+			boxView("Command", strings.Join(m.cmd, " "), m.width-33),
+			boxView("Time", m.t.Format(time.DateTime), 19),
+		)
+		remainingHeight = m.height - lipgloss.Height(headerView)
+		commandView     = viewport(m.output, m.x, m.y, m.width, remainingHeight)
+	)
+	return headerView + "\n" + commandView
 }
 
 // dekh is a simple modern alternative to the watch command.
