@@ -147,14 +147,15 @@ func (m model) Init() tea.Cmd {
 	return m.execute()
 }
 
-func (m model) xy() (int, int) {
+func (m model) snap() model {
 	var (
 		x2 = min(m.x+m.width, m.output.width)
 		x1 = max(x2-m.width, 0)
 		y2 = min(m.y+m.height, len(m.output.lines))
 		y1 = max(y2-m.height, 0)
 	)
-	return x1, y1
+	m.x, m.y = x1, y1
+	return m
 }
 
 type tickMsg time.Time
@@ -187,8 +188,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case outputMsg:
 		m.output = parseText(string(msg))
-		m.x, m.y = m.xy()
-		return m, m.tick()
+		return m.snap(), m.tick()
 	case tickMsg:
 		m.t = time.Time(msg)
 		return m, m.execute()
@@ -220,8 +220,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 	}
-	m.x, m.y = m.xy()
-	return m, nil
+	return m.snap(), nil
 }
 
 func (m model) View() string {
