@@ -101,19 +101,18 @@ func (pt parsedText) viewport(x, y, width, height int) string {
 		}
 		x, width := x, width
 		for _, pr := range line.runes {
-			if pr.visible {
-				if x > 0 {
-					x -= pr.width
-					continue
-				}
-				if width > 0 {
-					width -= pr.width
-				} else {
-					b.WriteString("\x1b[0m")
-					break
-				}
+			switch {
+			case !pr.visible:
+				b.WriteRune(pr.rune)
+			case x > 0:
+				x -= pr.width
+			case width > 0:
+				width -= pr.width
+				b.WriteRune(pr.rune)
+			default:
+				b.WriteString("\x1b[0m")
+				break
 			}
-			b.WriteRune(pr.rune)
 		}
 	}
 	return b.String()
