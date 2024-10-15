@@ -43,7 +43,7 @@ func TestViewport(t *testing.T) {
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			got := viewport(test.s, test.x, test.y, test.width, test.height)
+			got := parseText(test.s).viewport(test.x, test.y, test.width, test.height)
 			if diff := cmp.Diff(test.want, got); diff != "" {
 				t.Errorf("viewport(...) has diff(-want +got):\n%s", diff)
 			}

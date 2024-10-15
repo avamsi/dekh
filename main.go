@@ -1,7 +1,6 @@
 package main
 
 import (
-	"iter"
 	"os/exec"
 	"strings"
 	"time"
@@ -15,12 +14,121 @@ import (
 	"github.com/mattn/go-runewidth"
 )
 
+type parsedRune struct {
+	rune
+	visible bool
+	width   int
+}
+
+type parsedLine struct {
+	runes []parsedRune
+	width int
+}
+
+func (pl *parsedLine) write(r rune, visible bool) {
+	var (
+		width = runewidth.RuneWidth(r)
+		pr    = parsedRune{rune: r, visible: visible, width: width}
+	)
+	pl.runes = append(pl.runes, pr)
+	if visible {
+		pl.width += width
+	}
+}
+
+func parseLine(s string) parsedLine {
+	var (
+		runes      = []rune(strings.ReplaceAll(s, "\t", "    "))
+		pl         = parsedLine{runes: make([]parsedRune, 0, len(runes))}
+		visible    = true
+		terminator []rune
+	)
+	for i := 0; i < len(runes); i++ {
+		// Sloppy, but probably good enough for now: color codes end in `m`
+		// and hyperlinks in `ESC\` (at least, the ones I use).
+		if visible && runes[i] == 0x1b && i+1 < len(runes) {
+			switch runes[i+1] {
+			case '[':
+				visible = false
+				terminator = []rune{'m'}
+			case ']':
+				visible = false
+				terminator = []rune{'\x1b', '\\'}
+			}
+		}
+		pl.write(runes[i], visible)
+		if !visible && runes[i] == terminator[0] {
+			switch len(terminator) {
+			case 1:
+				visible = true
+			case 2:
+				if i+1 < len(runes) && runes[i+1] == terminator[1] {
+					pl.write(runes[i+1], false)
+					visible = true
+					i++
+				}
+			}
+		}
+	}
+	return pl
+}
+
+type parsedText struct {
+	lines []parsedLine
+	width int
+}
+
+func parseText(s string) parsedText {
+	var (
+		lines = strings.Split(s, "\n")
+		pt    = parsedText{lines: make([]parsedLine, len(lines))}
+	)
+	for i, line := range lines {
+		pt.lines[i] = parseLine(line)
+		pt.width = max(pt.width, pt.lines[i].width)
+	}
+	return pt
+}
+
+func (pt parsedText) viewport(x, y, width, height int) string {
+	var (
+		b  strings.Builder
+		x2 = min(x+width, pt.width)
+		x1 = max(x2-width, 0)
+		y2 = min(y+height, len(pt.lines))
+		y1 = max(y2-height, 0)
+	)
+	b.Grow((x2 - x1) * (y2 - y1))
+	for i, line := range pt.lines[y1:y2] {
+		if i > 0 {
+			b.WriteByte('\n')
+		}
+		x, width := x1, width
+		for _, pr := range line.runes {
+			if pr.visible {
+				if x > 0 {
+					x -= pr.width
+					continue
+				}
+				if width > 0 {
+					width -= pr.width
+				} else {
+					b.WriteString("\x1b[0m")
+					break
+				}
+			}
+			b.WriteRune(pr.rune)
+		}
+	}
+	return b.String()
+}
+
 type model struct {
 	d   time.Duration
 	cmd []string
 
 	t             time.Time
-	output        string
+	output        parsedText
 	x, y          int
 	width, height int
 }
@@ -55,7 +163,7 @@ func (m model) tick() tea.Cmd {
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case outputMsg:
-		m.output = string(msg)
+		m.output = parseText(string(msg))
 		return m, m.tick()
 	case tickMsg:
 		m.t = time.Time(msg)
@@ -91,88 +199,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func maxWidth(lines []string) int {
-	var n int
-	for _, line := range lines {
-		// This is obviously not correct, but eh.
-		n = max(n, len(line))
-	}
-	return n
-}
-
-func parse(s string) iter.Seq2[rune, bool] {
-	return func(yield func(rune, bool) bool) {
-		var (
-			s          = []rune(strings.ReplaceAll(s, "\t", "    "))
-			visible    = true
-			terminator []rune
-		)
-		for i := 0; i < len(s); i++ {
-			// Sloppy, but probably good enough for now: color codes end in `m`
-			// and hyperlinks in `\` (at least, the ones I use).
-			if visible && s[i] == 0x1b && i+1 < len(s) {
-				switch s[i+1] {
-				case '[':
-					terminator, visible = []rune{'m'}, false
-				case ']':
-					terminator, visible = []rune{'\x1b', '\\'}, false
-				}
-			}
-			if !yield(s[i], visible) {
-				break
-			}
-			if !visible && s[i] == terminator[0] {
-				switch len(terminator) {
-				case 1:
-					visible = true
-				case 2:
-					if i+1 < len(s) && s[i+1] == terminator[1] {
-						if !yield(s[i+1], false) {
-							break
-						}
-						visible = true
-						i++
-					}
-				}
-			}
-		}
-	}
-}
-
-func viewport(s string, x, y, width, height int) string {
-	var (
-		lines = strings.Split(s, "\n")
-		b     strings.Builder
-		y2    = min(y+height, len(lines))
-		y1    = max(y2-height, 0)
-		x2    = min(x+width, maxWidth(lines))
-		x1    = max(x2-width, 0)
-	)
-	b.Grow(len(s))
-	for i, line := range lines[y1:y2] {
-		if i > 0 {
-			b.WriteByte('\n')
-		}
-		x, width := x1, width
-		for r, visible := range parse(line) {
-			if visible {
-				if x > 0 {
-					x -= runewidth.RuneWidth(r)
-					continue
-				}
-				if width > 0 {
-					width -= runewidth.RuneWidth(r)
-				} else {
-					b.WriteString("\x1b[0m")
-					break
-				}
-			}
-			b.WriteRune(r)
-		}
-	}
-	return b.String()
-}
-
 func boxView(title, content string, width int) string {
 	border := lipgloss.NormalBorder()
 	border.Top = title + strings.Repeat(border.Top, width-len(title))
@@ -193,7 +219,7 @@ func (m model) View() string {
 			boxView("Time", m.t.Format(time.DateTime), 19),
 		)
 		remainingHeight = m.height - lipgloss.Height(headerView)
-		commandView     = viewport(m.output, m.x, m.y, m.width, remainingHeight)
+		commandView     = m.output.viewport(m.x, m.y, m.width, remainingHeight)
 	)
 	return headerView + "\n" + commandView
 }
