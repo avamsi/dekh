@@ -197,14 +197,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height -= lipgloss.Height(m.headerView())
 	case tea.MouseMsg:
 		switch msg.Button {
+		// TODO: Should these also be w/h based?
 		case tea.MouseButtonWheelUp:
 			m.y -= 5
 		case tea.MouseButtonWheelRight:
-			m.x += 5
+			m.x += 25
 		case tea.MouseButtonWheelDown:
 			m.y += 5
 		case tea.MouseButtonWheelLeft:
-			m.x -= 5
+			m.x -= 25
 		}
 	case tea.KeyMsg:
 		switch msg.String() {
