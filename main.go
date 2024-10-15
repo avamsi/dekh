@@ -198,24 +198,20 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.MouseMsg:
 		switch msg.Button {
 		case tea.MouseButtonWheelUp:
-			m.y--
+			m.y -= 5
 		case tea.MouseButtonWheelRight:
-			m.x++
+			m.x += 5
 		case tea.MouseButtonWheelDown:
-			m.y++
+			m.y += 5
 		case tea.MouseButtonWheelLeft:
-			m.x--
+			m.x -= 5
 		}
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "up":
-			m.y--
-		case "right":
-			m.x++
-		case "down":
-			m.y++
-		case "left":
-			m.x--
+		case "u":
+			m.y -= m.height / 2
+		case "d":
+			m.y += m.height / 2
 		case "ctrl+c", "q":
 			return m, tea.Quit
 		}
