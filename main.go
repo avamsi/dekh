@@ -167,8 +167,11 @@ func (m model) tick() tea.Cmd {
 }
 
 func boxView(title, content string, width int) string {
-	border := lipgloss.NormalBorder()
-	border.Top = title + strings.Repeat(border.Top, width-len(title))
+	var (
+		border  = lipgloss.NormalBorder()
+		padding = max(width-len(title), 0)
+	)
+	border.Top = title + strings.Repeat(border.Top, padding)
 	style := lipgloss.NewStyle().
 		Border(border).BorderForeground(lipgloss.Color("59")).Width(width)
 	return style.Render(content)
