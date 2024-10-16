@@ -147,7 +147,7 @@ func (m model) Init() tea.Cmd {
 	return m.execute()
 }
 
-func (m model) snap() model {
+func (m model) snapped() model {
 	var (
 		x2 = min(m.x+m.width, m.output.width)
 		x1 = max(x2-m.width, 0)
@@ -188,7 +188,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case outputMsg:
 		m.output = parseText(string(msg))
-		return m.snap(), m.tick()
+		return m.snapped(), m.tick()
 	case tickMsg:
 		m.t = time.Time(msg)
 		return m, m.execute()
@@ -217,7 +217,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 	}
-	return m.snap(), nil
+	return m.snapped(), nil
 }
 
 func (m model) View() string {
@@ -228,7 +228,7 @@ func (m model) View() string {
 		m.output.viewport(m.x, m.y, m.width, m.height)
 }
 
-// dekh is a simple modern alternative to the watch command.
+// dekh is a simple, modern alternative to the watch command.
 func dekh(cmd []string) error {
 	switch len(cmd) {
 	case 0:
