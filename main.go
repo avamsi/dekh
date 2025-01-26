@@ -136,10 +136,12 @@ func (m model) execute() tea.Cmd {
 			cmd         = exec.Command(m.cmd[0], m.cmd[1:]...)
 			output, err = cmd.CombinedOutput()
 		)
-		if err != nil {
+		switch err.(type) {
+		case nil, *exec.ExitError:
+			return outputMsg(output)
+		default:
 			return outputMsg(err.Error())
 		}
-		return outputMsg(output)
 	}
 }
 
